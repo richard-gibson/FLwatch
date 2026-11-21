@@ -5,7 +5,7 @@ iOS and watchOS app that shows CGM glucose readings on the iPhone, Apple Watch, 
 ## Prerequisites
 
 - **Full Xcode must be selected.** Run `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`. `xcodebuild` fails when xcode-select points at Command Line Tools.
-- **RoundWhiteDiscKit** is a local Swift package referenced at `../../GitHub/RoundWhiteDiscKit`, relative to the project (so `~/GitHub/RoundWhiteDiscKit`). It holds the Libre 3 BLE crypto, pairing and decoding code. It isn't in this repo. Without it, the `Libre3BLE` code and the tests don't compile.
+- **RoundWhiteDiscKit** is a local Swift package referenced at `../../GitHub/RoundWhiteDiscKit`, relative to the project (so `~/GitHub/RoundWhiteDiscKit`). Run `bash scripts/setup_roundwhitedisckit.sh` to install the pinned pairing and watch support revisions. Without this package, the `Libre3BLE` code and the tests don't compile.
 - There are no remote SPM dependencies. Fastlane comes from `Gemfile`, so run it with `bundle exec`.
 
 ## Build and test

@@ -166,7 +166,7 @@ The biggest risks are the region (Gen2 blocks everything) and the Apple Watch's 
 The first step is to find out which sensor we have. Everything after that depends on it being Gen1.
 
 - [ ] Region confirmed as EU (likely Gen1). Confirm `patchInfo` with an NFC read: `C6` or `7F … 31` is a go, `2C` is Gen2. Getting readings in xDrip4iOS as "Libre 2/2+ EU" is strong evidence of Gen1.
-- [ ] Install Xcode, get RoundWhiteDiscKit, and get the current app building (prerequisite for everything).
+- [x] Establish a simulator baseline with FLwatch 3.1.7 build 242. See [Simulator baseline](#simulator-baseline) for the dependency revisions and test result.
 - [ ] Spike: port LibreTransmitter's (MIT) `PreLibre2` decrypt + `Libre2DirectTransmitter` into a standalone test target. Feed it recorded frames, so the crypto can be tested without a sensor.
 - [ ] Spike: NFC enable + BLE unlock on a real sensor, logging decrypted raw values next to the official app's readings.
 - [ ] Choose and validate the calibration algorithm (LibreTransmitter vs DiaBLE) by comparing it with the official app for at least 2 days.
@@ -179,6 +179,14 @@ Open questions:
 - Should FLwatch also be able to activate a new sensor (`0x1B`), or only take over one the official app started? Taking over only is the recommendation, matching the default for Libre 3.
 - Is losing the official app's alarms acceptable, or is a passive "listen only" mode needed? Listen-only skips the unlock write, works only on the same iPhone, and has no watch support.
 - Should Gen2 (US Libre 2 Plus) be in scope? It would mean porting GPL Juggluco code or doing independent reverse engineering, and it isn't recommended.
+
+## Simulator baseline
+
+Run `bash scripts/setup_roundwhitedisckit.sh` from the FLwatch checkout to reproduce the local package setup.
+
+On 2026-11-21, FLwatch 3.1.7 build 242 (`9f7e722`) built successfully with Xcode 27.2. All 182 `LibreWristTests` passed on the iPhone 18 Pro simulator running iOS 27.2 (runtime build `24B8117`). This run covered the simulator build and unit tests. NFC pairing and sensor streaming still require a physical iPhone.
+
+FLwatch resolves RoundWhiteDiscKit from `~/GitHub/RoundWhiteDiscKit`. [Phil’s reply on issue #31](https://github.com/poml88/FLwatch/issues/31#issuecomment-7002780837) pointed to [the original package](https://github.com/airedev326/RoundWhiteDiscKit), whose commit `7dd6396` provides `AppIdentities.install(json:)`. The build used that commit with four commits from [Phil’s `watchos-support` branch](https://github.com/poml88/RoundWhiteDiscKit/tree/watchos-support) cherry-picked in order: `28cc246`, `fe2653d`, `a019d6a`, and `aabc070`. The resulting local package branch is `flwatch-242` at `d1cba08`.
 
 ## Appendix: Connecting the sensor to xDrip4iOS
 
