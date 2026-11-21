@@ -76,6 +76,7 @@ struct PhoneAppSettingsView: View {
     @State private var isShowingSiriSheet = false
     @State private var isShowingDeveloperAlert = false
     @State private var isShowingCalibrationSheet = false
+    @StateObject private var libre2PatchInfoScanner = Libre2PatchInfoScanner()
     @State private var developerAlertRequiresCode = true
     @State private var enteredDeveloperCode = ""
     @State private var mailResult: Result<MFMailComposeResult, Error>? = nil
@@ -1215,6 +1216,7 @@ struct PhoneAppSettingsView: View {
                 Text("Error message: \(DebugMessageSingleton.shared.libreLinkUpResponseError)")
                 
                 if developerModeEnabled {
+                    libre2PatchInfoDiagnostics
                     Text("BG task executions last 12 hours (total): \(bgAppRefreshExecutionTimestamps.count)")
                     ForEach(Array(bgAppRefreshExecutionTimestamps.enumerated()), id: \.offset) { _, timestamp in
                         Text(timestamp.formatted(date: .abbreviated, time: .standard))
@@ -1235,8 +1237,42 @@ struct PhoneAppSettingsView: View {
             guard newPhase == .active else { return }
             refreshAppleHealthStatus()
         }
+        .onDisappear { libre2PatchInfoScanner.cancel() }
+        .onChange(of: developerModeEnabled) { _, enabled in
+            if !enabled { libre2PatchInfoScanner.cancel() }
+        }
 
     }
+
+    @ViewBuilder
+    private var libre2PatchInfoDiagnostics: some View {
+        Button("Read Libre 2 Plus sensor information") {
+            libre2PatchInfoScanner.scan()
+        }
+        .disabled(libre2PatchInfoScanner.state == .scanning)
+
+        switch libre2PatchInfoScanner.state {
+        case .idle, .scanning:
+            EmptyView()
+        case .read(let patchInfo):
+            if Libre2Gen1.supportsPlus(patchInfo: patchInfo) {
+                Text("Recognized European Libre 2 Plus signature")
+            } else {
+                Text("Unrecognized European Libre 2 Plus signature")
+            }
+            LabeledContent {
+                Text(verbatim: patchInfo.hex)
+                    .monospaced()
+                    .textSelection(.enabled)
+            } label: {
+                Text("NFC patch information")
+            }
+        case .failed(let message):
+            Text(verbatim: message)
+                .foregroundStyle(.secondary)
+        }
+    }
+
     func sendMessagetoOther(message: [String: Any]) {
         watchConnector.sendMessageToPairedDevice(message)
     }

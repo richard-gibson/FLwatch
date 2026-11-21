@@ -190,9 +190,15 @@ The goal is direct Bluetooth glucose readings from a supported European Libre 2 
 - Add a shared Libre 2 module that classifies NFC patch info, assembles fragmented BLE notifications, decrypts Gen1 frames, checks their integrity and extracts raw glucose, temperature and wear time. Keep these operations independent of Core Bluetooth and Core NFC.
 - Add fixture tests to `LibreWristTests` for supported Libre 2 Plus signatures, unsupported variants, corrupt or incomplete frames, and trend/history timestamps. Use known expected output for a captured frame and exercise duplicate delivery and reconnect overlap.
 
+**Complete.** Commit `a7052a6` compiled the decoder for iOS and watchOS. All 187 unit tests passed on the iPhone 17 simulator with iOS 27.2, including the five new Libre 2 tests.
+
 The decoder uses the `Libre2.BLEExample` fixture from [LibreTransmitter at `41105123`](https://github.com/LoopKit/LibreTransmitter/blob/41105123c3c4fb5c55ce89a38630cea2f8f7a17a/LibreSensor/SensorContents/PreLibre2.swift). Expected values were checked with the upstream decoder. The fixture exercises Gen1 framing and raw values. The source does not identify its exact sensor variant. The follow-up frame is synthetic and tests that overlapping samples retain their sensor-minute identity. Cross-frame deduplication belongs at ingestion in step 3.
 
 ### 2. Verify NFC and BLE on a physical iPhone
+
+**Started.** In a signed iPhone build, enable Developer Mode in FLwatch and open **Settings → Debug Info → Read Libre 2 Plus sensor information**. Hold the top of the iPhone against the sensor. The scanner reads the patch bytes and reports whether they match the current EU Plus allowlist. It issues the empty ISO 15693 patch-info request and displays the result only in memory. Record the patch bytes and recognition result before attempting a separate streaming test. Physical verification remains pending.
+
+The diagnostic compiled and all 187 unit tests passed on the iPhone 18 Pro Max simulator with iOS 27.2.
 
 - Sign FLwatch with a team that supports NFC Tag Reading. Use a spare, already-started sensor so the takeover does not interrupt an active monitoring setup.
 - Add a connection flow that reads patch info first. Proceed with enabling streaming only for supported variants and after the user confirms the effect on the Abbott app connection. Read and retain the calibration data and reconnect state. Keep unlock material in Keychain and out of diagnostics.

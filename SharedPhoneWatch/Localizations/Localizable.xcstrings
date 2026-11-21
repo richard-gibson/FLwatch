@@ -120,6 +120,24 @@
         }
       }
     },
+    "Hold the top of your iPhone against the Libre 2 Plus sensor." : {
+      "comment" : "System NFC prompt for the read-only Libre 2 Plus sensor check."
+    },
+    "NFC patch information" : {
+      "comment" : "Label for the hexadecimal NFC patch information bytes."
+    },
+    "Read Libre 2 Plus sensor information" : {
+      "comment" : "Developer settings button for the read-only Libre 2 Plus scan."
+    },
+    "Recognized European Libre 2 Plus signature" : {
+      "comment" : "Developer scan result for a supported NFC patch signature."
+    },
+    "Sensor information read." : {
+      "comment" : "System NFC prompt after the read-only Libre 2 Plus scan completes."
+    },
+    "Unrecognized European Libre 2 Plus signature" : {
+      "comment" : "Developer scan result for a patch signature outside the supported allowlist."
+    },
     "“Libre 3 app” here means whichever Abbott app you use: FreeStyle Libre 3 or Libre by Abbott." : {
       "comment" : "Defines a shorthand the rest of this screen uses, so the other texts can say 'the Libre 3 app' without naming one of Abbott's two apps and misleading users of the other. Keep both product names untranslated.",
       "localizations" : {
