@@ -196,13 +196,22 @@ The decoder uses the `Libre2.BLEExample` fixture from [LibreTransmitter at `4110
 
 ### 2. Verify NFC and BLE on a physical iPhone
 
-**Started.** In a signed iPhone build, enable Developer Mode in FLwatch and open **Settings → Debug Info → Read Libre 2 Plus sensor information**. Hold the top of the iPhone against the sensor. The scanner reads the patch bytes and reports whether they match the current EU Plus allowlist. It issues the empty ISO 15693 patch-info request and displays the result only in memory. Record the patch bytes and recognition result before attempting a separate streaming test. Physical verification remains pending.
+**In progress.** The read-only NFC diagnostic is implemented. It issues the empty ISO 15693 patch-info request, displays the result in memory, and reports whether the patch bytes match the current EU Plus allowlist. All 187 unit tests passed on the iPhone 18 Pro Max simulator with iOS 27.2. A signing team with NFC Tag Reading is still pending.
 
-The diagnostic compiled and all 187 unit tests passed on the iPhone 18 Pro Max simulator with iOS 27.2.
+#### Work to do while signing is pending
 
-- Sign FLwatch with a team that supports NFC Tag Reading. Use a spare, already-started sensor so the takeover does not interrupt an active monitoring setup.
-- Add a connection flow that reads patch info first. Proceed with enabling streaming only for supported variants and after the user confirms the effect on the Abbott app connection. Read and retain the calibration data and reconnect state. Keep unlock material in Keychain and out of diagnostics.
-- Confirm that the iPhone receives fresh frames with internet access disabled. Exercise backgrounding and reconnect. If the sensor variant is unsupported or the scan fails, surface the error before attempting streaming.
+1. **Build the pairing flow against a simulated NFC transport.** Separate command construction and response parsing from Core NFC. Implement the confirmation step for enabling streaming on a supported, already-started sensor. Test that unsupported patch info, malformed responses, cancellation, and scan failures prevent the enable request or leave pairing incomplete. Carry the calibration bytes forward as raw data for phase 3.
+2. **Implement reconnect state and the BLE session.** Store unlock material in Keychain and keep it out of diagnostics. Use in-memory storage in tests. Implement discovery, subscription, unlock, notification assembly and reconnect through a transport that can be driven by scripted events. Test unlock-counter updates, interrupted setup, stale callbacks, incomplete frames, duplicate notifications and reconnect overlap. Keep experimental output in Developer Mode.
+3. **Run a simulated pairing-to-stream test.** Feed known patch info, a scripted NFC enable response and encrypted BLE fixtures through the same state machine the device will use. Verify advancing sensor minutes, valid frame checksums and recovery after a scripted disconnect. Exercise the path without cloud credentials or network calls. Keep fixtures in tests.
+4. **Start independent work for phases 3 and 4.** Review calibration code provenance, test ingestion deduplication with synthetic readings, and test the versioned watch provisioning and ownership transitions with simulated peers. Live calibration and watch reception remain hardware checks.
+
+The target before signing is available is a passing simulator test from the initial patch-info read through the first decoded frame and a reconnect. This verifies app logic against fixtures. Sensor compatibility, radio behavior and actual offline operation remain to be measured.
+
+#### Hardware checks once signing is available
+
+1. Install an NFC-capable build on a physical iPhone. Enable Developer Mode and open **Settings → Debug Info → Read Libre 2 Plus sensor information**. Record the patch bytes and recognition result. Investigate an unrecognized signature before trying to enable streaming.
+2. Pair a spare, already-started sensor using the separate confirmation flow. Verify that calibration data and reconnect state are available and that fresh BLE notifications decode into frames with advancing sensor minutes.
+3. With Wi-Fi and cellular data off and Bluetooth on, confirm that frames keep arriving. Background the app, interrupt the Bluetooth link, and verify that reception resumes after reconnect without shifting sensor timestamps.
 
 ### 3. Validate glucose conversion and integrate the iPhone provider
 
