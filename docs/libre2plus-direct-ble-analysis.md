@@ -167,7 +167,7 @@ The first step is to find out which sensor we have. Everything after that depend
 
 - [ ] Region confirmed as EU (likely Gen1). Confirm `patchInfo` with an NFC read: `C6` or `7F … 31` is a go, `2C` is Gen2. Getting readings in xDrip4iOS as "Libre 2/2+ EU" is strong evidence of Gen1.
 - [x] Establish a simulator baseline with FLwatch 3.1.7 build 242. See [Simulator baseline](#simulator-baseline) for the dependency revisions and test result.
-- [ ] Spike: port LibreTransmitter's (MIT) `PreLibre2` decrypt + `Libre2DirectTransmitter` into a standalone test target. Feed it recorded frames, so the crypto can be tested without a sensor.
+- [x] Decode Gen1 frames in the existing `LibreWristTests` target using an upstream encrypted fixture and a derived follow-up frame.
 - [ ] Spike: NFC enable + BLE unlock on a real sensor, logging decrypted raw values next to the official app's readings.
 - [ ] Choose and validate the calibration algorithm (LibreTransmitter vs DiaBLE) by comparing it with the official app for at least 2 days.
 - [ ] Build the `libre2BLE` provider, connect view and tests (see Proposed design).
@@ -179,6 +179,38 @@ Open questions:
 - Should FLwatch also be able to activate a new sensor (`0x1B`), or only take over one the official app started? Taking over only is the recommendation, matching the default for Libre 3.
 - Is losing the official app's alarms acceptable, or is a passive "listen only" mode needed? Listen-only skips the unlock write, works only on the same iPhone, and has no watch support.
 - Should Gen2 (US Libre 2 Plus) be in scope? It would mean porting GPL Juggluco code or doing independent reverse engineering, and it isn't recommended.
+
+## Implementation plan for `libre-2-nfc`
+
+The goal is direct Bluetooth glucose readings from a supported European Libre 2 Plus sensor on iPhone and Apple Watch, with the internet disconnected. The iPhone scans the sensor over NFC and normally receives readings. During a workout, the watch can claim the sensor and receive readings directly with the phone out of range. EU Gen1 compatibility is the working assumption until a physical scan confirms the sensor variant.
+
+### 1. Prove frame decoding in the simulator
+
+- Review the license and provenance of the LibreTransmitter code and any fixtures before incorporating them. Use the verified simulator setup below.
+- Add a shared Libre 2 module that classifies NFC patch info, assembles fragmented BLE notifications, decrypts Gen1 frames, checks their integrity and extracts raw glucose, temperature and wear time. Keep these operations independent of Core Bluetooth and Core NFC.
+- Add fixture tests to `LibreWristTests` for supported Libre 2 Plus signatures, unsupported variants, corrupt or incomplete frames, and trend/history timestamps. Use known expected output for a captured frame and exercise duplicate delivery and reconnect overlap.
+
+The decoder uses the `Libre2.BLEExample` fixture from [LibreTransmitter at `41105123`](https://github.com/LoopKit/LibreTransmitter/blob/41105123c3c4fb5c55ce89a38630cea2f8f7a17a/LibreSensor/SensorContents/PreLibre2.swift). Expected values were checked with the upstream decoder. The fixture exercises Gen1 framing and raw values. The source does not identify its exact sensor variant. The follow-up frame is synthetic and tests that overlapping samples retain their sensor-minute identity. Cross-frame deduplication belongs at ingestion in step 3.
+
+### 2. Verify NFC and BLE on a physical iPhone
+
+- Sign FLwatch with a team that supports NFC Tag Reading. Use a spare, already-started sensor so the takeover does not interrupt an active monitoring setup.
+- Add a connection flow that reads patch info first. Proceed with enabling streaming only for supported variants and after the user confirms the effect on the Abbott app connection. Read and retain the calibration data and reconnect state. Keep unlock material in Keychain and out of diagnostics.
+- Confirm that the iPhone receives fresh frames with internet access disabled. Exercise backgrounding and reconnect. If the sensor variant is unsupported or the scan fails, surface the error before attempting streaming.
+
+### 3. Validate glucose conversion and integrate the iPhone provider
+
+- Establish the source and license for the calibration implementation. Validate its output against timestamped Abbott reference readings and document the comparison before exposing experimental readings through normal app surfaces.
+- Register `libre2BLE` in `CGMProviderKind` and `CGMReadingSource`. Route validated readings through `LibreLinkUpHistory` so existing displays can use them. Order and deduplicate by sensor identity and sensor minute, including overlapping trend/history data after reconnect.
+- Cover provider switching, persisted snapshot compatibility and direct-source Nightscout eligibility in unit tests. Verify that LibreLinkUp and Libre 3 still work and that the direct provider runs with LibreLinkUp credentials absent.
+
+### 4. Add and verify Apple Watch workout handoff
+
+- Extend `WatchConnectivityManager` provisioning with the Libre 2 reconnect data. Version the message, keep existing Libre 3 peers compatible, and require compatible peers for a Libre 2 handoff.
+- Persist and transfer the latest unlock counter with ownership. Test acknowledgment, timeout, interruption, watch restart and return to the phone. Verify that only the current owner connects and that syncing readings after handback does not duplicate or shift them.
+- On physical hardware, start a workout, take the phone out of Bluetooth range and verify that current glucose continues on the watch with its display asleep. End the workout and verify that the phone resumes receiving readings. Record observed limits on background reception and reconnects.
+
+The first implementation milestone is a passing Gen1 frame fixture test. The first hardware milestone is a verified Libre 2 Plus stream on iPhone with internet access disabled. Watch workout handoff completes the initial scope. New sensor activation, Gen2 support and all-day standalone watch streaming are deferred.
 
 ## Simulator baseline
 

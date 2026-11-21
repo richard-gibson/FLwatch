@@ -14,6 +14,89 @@ import RoundWhiteDiscKit
 
 final class LibreWristTests: XCTestCase {
 
+    // LoopKit/LibreTransmitter PreLibre2.swift, Libre2.BLEExample at 41105123.
+    // The upstream example is a Gen1 Libre 2 frame. Its exact Plus variant is unspecified.
+    private let libre2FixtureUID = Data([0x2F, 0xE7, 0xB1, 0x00, 0x00, 0xA4, 0x07, 0xE0])
+    private let libre2FixtureFrame = Data([
+        0xB1, 0x94, 0xFA, 0xED, 0x2C, 0xDE, 0xA1, 0x69, 0x46, 0x57, 0xCF, 0xD0,
+        0xD8, 0x5A, 0xAA, 0xF1, 0xE2, 0x89, 0x1C, 0xE9, 0xAC, 0x82, 0x16, 0xFB,
+        0x67, 0xA1, 0xD3, 0xB6, 0x3F, 0x91, 0xCD, 0x18, 0x4B, 0x95, 0x31, 0x6C,
+        0x04, 0x5F, 0xE1, 0x96, 0xC4, 0xFD, 0x14, 0xFC, 0x68, 0xE0
+    ])
+
+    func testLibre2RecognizesEuropeanPlusPatchInfo() {
+        XCTAssertTrue(Libre2Gen1.supportsPlus(patchInfo: Data([0xC6, 0x09, 0x31, 0x01, 0x00, 0x00])))
+        XCTAssertTrue(Libre2Gen1.supportsPlus(patchInfo: Data([0x7F, 0x0E, 0x31, 0x01])))
+        for unsupported: [UInt8] in [
+            [], [0xC6], [0x7F, 0x0E, 0x31], [0x7F, 0x0E, 0x30, 0x01],
+            [0x7F, 0x0E, 0x39, 0x01], [0x2C, 0x0A, 0x3A, 0x02], [0x9D, 0x08, 0x30, 0x01]
+        ] {
+            XCTAssertFalse(Libre2Gen1.supportsPlus(patchInfo: Data(unsupported)))
+        }
+    }
+
+    func testLibre2DecodesUpstreamFrameAndPreservesSensorMinutes() throws {
+        let decoded = try Libre2Gen1.decode(libre2FixtureFrame, sensorUID: libre2FixtureUID)
+        XCTAssertEqual(decoded.wearMinutes, 11_509)
+        XCTAssertEqual(decoded.trend.map(\.sensorMinute), [11_509, 11_507, 11_505, 11_503, 11_502, 11_497, 11_494])
+        XCTAssertEqual(decoded.trend.map(\.rawGlucose), [2542, 2534, 2513, 2497, 2470, 2461, 2452])
+        XCTAssertEqual(decoded.trend.map(\.rawTemperature), [6336, 6328, 6316, 6344, 6352, 6316, 6316])
+        XCTAssertEqual(decoded.trend.map(\.rawTemperatureAdjustment), [8, 12, 12, 8, 12, 12, 12])
+        XCTAssertEqual(decoded.history, [
+            .init(sensorMinute: 11_505, rawGlucose: 2514, rawTemperature: 6316, rawTemperatureAdjustment: 12)
+        ])
+        XCTAssertEqual(try Libre2Gen1.decode(libre2FixtureFrame, sensorUID: libre2FixtureUID), decoded)
+    }
+
+    func testLibre2ReconnectFrameKeepsOverlappingSensorMinutesStable() throws {
+        // Derived from the upstream fixture using its checksum and keystream.
+        // Wear time advances two minutes and the newest adjustment is negative.
+        let next = Data([
+            0xB1, 0x94, 0xFA, 0xED, 0x2C, 0x5E, 0xA1, 0x69, 0x46, 0x57, 0xCF, 0xD0,
+            0xD8, 0x5A, 0xAA, 0xF1, 0xE2, 0x89, 0x1C, 0xE9, 0xAC, 0x82, 0x16, 0xFB,
+            0x67, 0xA1, 0xD3, 0xB6, 0x3F, 0x91, 0xCD, 0x18, 0x4B, 0x95, 0x31, 0x6C,
+            0x04, 0x5F, 0xE1, 0x96, 0xC4, 0xFD, 0x16, 0xFC, 0x0E, 0xCB
+        ])
+        let first = try Libre2Gen1.decode(libre2FixtureFrame, sensorUID: libre2FixtureUID)
+        let second = try Libre2Gen1.decode(next, sensorUID: libre2FixtureUID)
+        XCTAssertEqual(second.wearMinutes, 11_511)
+        XCTAssertEqual(second.trend.first?.rawTemperatureAdjustment, -8)
+        XCTAssertEqual(second.history, first.history)
+        let overlap = Set(first.trend.map(\.sensorMinute)).intersection(second.trend.map(\.sensorMinute))
+        XCTAssertEqual(overlap, [11_505, 11_507, 11_509])
+    }
+
+    func testLibre2RejectsCorruptFramesAndInvalidLengths() {
+        var corrupt = libre2FixtureFrame
+        corrupt[8] ^= 1
+        XCTAssertThrowsError(try Libre2Gen1.decode(corrupt, sensorUID: libre2FixtureUID)) {
+            XCTAssertEqual($0 as? Libre2Gen1.DecodeError, .invalidChecksum)
+        }
+        XCTAssertThrowsError(try Libre2Gen1.decode(libre2FixtureFrame.dropLast(), sensorUID: libre2FixtureUID)) {
+            XCTAssertEqual($0 as? Libre2Gen1.DecodeError, .invalidFrameLength)
+        }
+        XCTAssertThrowsError(try Libre2Gen1.decode(libre2FixtureFrame, sensorUID: libre2FixtureUID.dropLast())) {
+            XCTAssertEqual($0 as? Libre2Gen1.DecodeError, .invalidSensorUID)
+        }
+    }
+
+    func testLibre2AssemblesNotificationsAndClearsIncompleteFrames() throws {
+        var assembler = Libre2Gen1.FrameAssembler()
+        XCTAssertNil(try assembler.append(libre2FixtureFrame.prefix(20)))
+        XCTAssertNil(try assembler.append(libre2FixtureFrame[20..<40]))
+        XCTAssertEqual(try assembler.append(libre2FixtureFrame.suffix(6)), libre2FixtureFrame)
+
+        XCTAssertNil(try assembler.append(libre2FixtureFrame.prefix(20)))
+        XCTAssertThrowsError(try assembler.append(libre2FixtureFrame)) {
+            XCTAssertEqual($0 as? Libre2Gen1.DecodeError, .invalidFrameLength)
+        }
+        XCTAssertEqual(try assembler.append(libre2FixtureFrame), libre2FixtureFrame)
+
+        XCTAssertNil(try assembler.append(libre2FixtureFrame.prefix(20)))
+        assembler.reset()
+        XCTAssertEqual(try assembler.append(libre2FixtureFrame), libre2FixtureFrame)
+    }
+
     override func setUpWithError() throws {
         // Put setup code here. This method is called before the invocation of each test method in the class.
     }

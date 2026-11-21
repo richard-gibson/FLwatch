@@ -498,6 +498,7 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		F2581F442DBF49248A131FC9 /* Libre2BLE */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Libre2BLE; sourceTree = "<group>"; };
 		7B62ED7A2FACC97700C9502B /* Dexcom */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Dexcom; sourceTree = "<group>"; };
 		7BDF0A832DBBB3AA00852BAD /* Localizations */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (7B3931622E58697800E2406E /* PBXFileSystemSynchronizedBuildFileExceptionSet */, 7B3931632E58697800E2406E /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = Localizations; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -611,6 +612,7 @@
 		7B3EA4FE2C6C0B1A0061F239 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				F2581F442DBF49248A131FC9 /* Libre2BLE */,
 				7BB143142FCC839F00F31802 /* Libre3BLE */,
 				7BB143072FCC79A000F31802 /* Libre3 */,
 				7BC700002FF0000000C70000 /* Nightscout */,
@@ -921,6 +923,7 @@
 			fileSystemSynchronizedGroups = (
 				7B62ED7A2FACC97700C9502B /* Dexcom */,
 				7BDF0A832DBBB3AA00852BAD /* Localizations */,
+				F2581F442DBF49248A131FC9 /* Libre2BLE */,
 			);
 			name = FLwatch;
 			packageProductDependencies = (
@@ -983,6 +986,7 @@
 			fileSystemSynchronizedGroups = (
 				7B62ED7A2FACC97700C9502B /* Dexcom */,
 				7BDF0A832DBBB3AA00852BAD /* Localizations */,
+				F2581F442DBF49248A131FC9 /* Libre2BLE */,
 			);
 			name = FLwatchWatchApp;
 			packageProductDependencies = (
