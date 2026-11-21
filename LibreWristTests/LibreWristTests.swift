@@ -202,6 +202,35 @@ final class LibreWristTests: XCTestCase {
         XCTAssertEqual(try stream.receive(libre2FixtureFrame, attempt: connection.attempt)?.wearMinutes, 11_509)
     }
 
+    func testLibre2ValidatesEncryptedFRAMBeforeEnablingStreaming() {
+        // Synthetic 24-byte headers encrypted with LibreTransmitter's FRAM routine.
+        let ready = Data([
+            0x08, 0x71, 0xB6, 0x1F, 0x9D, 0xAE, 0xF1, 0x51, 0xD4, 0x22, 0x0B, 0xF4,
+            0x0F, 0xB0, 0x6B, 0xE3, 0xAA, 0x3E, 0xB4, 0x23, 0x7E, 0xD6, 0x46, 0xB3
+        ]) + Data(repeating: 0, count: 320)
+        var expired = ready
+        expired.replaceSubrange(0..<5, with: [0x38, 0x70, 0xB6, 0x1F, 0x9A])
+        var corrupted = ready
+        corrupted[8] ^= 1
+        XCTAssertTrue(Libre2Gen1.isReadyToStream(
+            encryptedFRAM: ready, sensorUID: libre2FixtureUID, patchInfo: libre2PlusPatchInfo
+        ))
+        for fram in [expired, corrupted, ready.dropLast()] {
+            XCTAssertFalse(Libre2Gen1.isReadyToStream(
+                encryptedFRAM: fram, sensorUID: libre2FixtureUID, patchInfo: libre2PlusPatchInfo
+            ))
+        }
+    }
+
+    func testLibre2PairingCredentialsPreserveReconnectStateThroughEncoding() throws {
+        var credentials = try libre2SimulatedPairing()
+        credentials.unlockCounter = 12
+        let encoded = try JSONEncoder().encode(credentials)
+        let restored = try JSONDecoder().decode(Libre2Pairing.Credentials.self, from: encoded)
+        XCTAssertTrue(restored.isValid)
+        XCTAssertEqual(restored, credentials)
+    }
+
     private func libre2SimulatedPairing() throws -> Libre2Pairing.Credentials {
         var pairing = Libre2Pairing()
         XCTAssertEqual(pairing.firstRequest, .readPatchInfo)

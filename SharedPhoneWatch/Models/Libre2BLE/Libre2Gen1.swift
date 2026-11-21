@@ -65,6 +65,21 @@ enum Libre2Gen1 {
             || prefix == [0x7F, 0x0E, 0x31, 0x01]
     }
 
+    /// Checks the encrypted FRAM header before a live streaming-enable write.
+    static func isReadyToStream(encryptedFRAM: Data, sensorUID: Data, patchInfo: Data) -> Bool {
+        guard encryptedFRAM.count == 344, sensorUID.count == 8, patchInfo.count == 6,
+              supportsPlus(patchInfo: patchInfo) else { return false }
+        let uid = Array(sensorUID)
+        let argument = word(Array(patchInfo), at: 4) ^ 0x44
+        let encryptedHeader = Array(encryptedFRAM.prefix(24))
+        var header: [UInt8] = []
+        for block in 0..<3 {
+            let key = keyBlock(uid: uid, x: UInt16(block), y: argument).flatMap(littleEndianBytes)
+            header += zip(encryptedHeader[block * 8..<(block + 1) * 8], key).map { $0 ^ $1 }
+        }
+        return checksum(header.dropFirst(2)) == word(header, at: 0) && header[4] == 0x03
+    }
+
     /// Consumes notification fragments from one connection in arrival order.
     /// Reset on disconnect or when a partial frame times out.
     struct FrameAssembler {

@@ -207,9 +207,15 @@ The decoder uses the `Libre2.BLEExample` fixture from [LibreTransmitter at `4110
 
 The target before signing is available is a passing simulator test from the initial patch-info read through the first decoded frame and a reconnect. This verifies app logic against fixtures. Sensor compatibility, radio behavior and actual offline operation remain to be measured.
 
-The scripted path now drives the shared pairing and stream state through patch-info validation, confirmation, a FRAM read, streaming enable, subscription, unlock, fragmented frame decoding and reconnect. Tests compare the NFC enable payload and two BLE unlock payloads with the upstream implementation. They also cover cancellation, malformed responses, counter persistence failure, stale callbacks, duplicate frames and interrupted fragments. The test saves counters in memory. The production Core NFC and Core Bluetooth adapters, Keychain storage, and confirmation UI still need to be wired to this path.
+The scripted path now drives the shared pairing and stream state through patch-info validation, confirmation, a FRAM read, streaming enable, subscription, unlock, fragmented frame decoding and reconnect. Tests compare the NFC enable payload and two BLE unlock payloads with the upstream implementation. They also cover cancellation, malformed responses, counter persistence failure, stale callbacks, duplicate frames and interrupted fragments. The test saves counters in memory.
 
 **Simulator milestone complete.** All 190 unit tests passed on the iPhone Air simulator with iOS 27.2, including three new pairing and stream tests.
+
+**iPhone NFC pairing implemented.** After a recognized read-only scan, Developer Mode offers **Enable Libre 2 Plus Bluetooth streaming**. A separate confirmation explains the effect on the Abbott app, and the iPhone must scan the same sensor again. The app reads FRAM, checks the header checksum and ready state, then sends the enable request. It stores the response, encrypted calibration data, unlock code and counter in one device-local Keychain item. The live Core Bluetooth adapter and physical verification remain pending.
+
+All 192 unit tests passed on the iPhone 17e simulator with iOS 27.2, including new tests for the encrypted FRAM header and the pairing data round trip.
+
+**Next while signing is pending.** Wire the saved Keychain pairing into a developer-only Core Bluetooth diagnostic. Match advertisements against the paired sensor, subscribe to notifications, and persist the next unlock counter before sending each unlock. Feed incoming fragments to the tested stream state machine and expose frame counts and sensor minutes for the hardware check.
 
 #### Hardware checks once signing is available
 

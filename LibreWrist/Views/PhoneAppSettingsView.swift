@@ -77,6 +77,7 @@ struct PhoneAppSettingsView: View {
     @State private var isShowingDeveloperAlert = false
     @State private var isShowingCalibrationSheet = false
     @StateObject private var libre2PatchInfoScanner = Libre2PatchInfoScanner()
+    @State private var confirmingLibre2Streaming = false
     @State private var developerAlertRequiresCode = true
     @State private var enteredDeveloperCode = ""
     @State private var mailResult: Result<MFMailComposeResult, Error>? = nil
@@ -1267,6 +1268,18 @@ struct PhoneAppSettingsView: View {
             } label: {
                 Text("NFC patch information")
             }
+            if libre2PatchInfoScanner.canPair {
+                Button("Enable Libre 2 Plus Bluetooth streaming") {
+                    confirmingLibre2Streaming = true
+                }
+                .confirmationDialog("Enable Libre 2 Plus Bluetooth streaming", isPresented: $confirmingLibre2Streaming) {
+                    Button("Enable streaming") { libre2PatchInfoScanner.pairInspectedSensor() }
+                } message: {
+                    Text("Use a spare sensor that has finished warming up. Enabling streaming can interrupt the Abbott app’s connection and alarms.")
+                }
+            }
+        case .paired:
+            Text("Libre 2 Plus pairing saved.")
         case .failed(let message):
             Text(verbatim: message)
                 .foregroundStyle(.secondary)

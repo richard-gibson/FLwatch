@@ -3,17 +3,23 @@ import Foundation
 /// A single, explicitly confirmed NFC pairing attempt. The transport owns
 /// the tag session and must deliver each response to its original attempt.
 struct Libre2Pairing {
-    struct Sensor {
+    struct Sensor: Codable, Equatable {
         let uid: Data
         let patchInfo: Data
     }
 
-    struct Credentials {
+    struct Credentials: Codable, Equatable {
         let sensor: Sensor
         let bluetoothAddress: Data
         let encryptedFRAM: Data
         let unlockCode: UInt32
         var unlockCounter: UInt16
+
+        var isValid: Bool {
+            sensor.uid.count == 8 && sensor.patchInfo.count == 6
+                && Libre2Gen1.supportsPlus(patchInfo: sensor.patchInfo)
+                && bluetoothAddress.count == 6 && encryptedFRAM.count == 344
+        }
     }
 
     enum Request: Equatable {

@@ -120,8 +120,17 @@
         }
       }
     },
+    "Enable Libre 2 Plus Bluetooth streaming" : {
+      "comment" : "Developer-only Libre 2 Plus NFC pairing."
+    },
+    "Enable streaming" : {
+      "comment" : "Developer-only Libre 2 Plus NFC pairing."
+    },
     "Hold the top of your iPhone against the Libre 2 Plus sensor." : {
       "comment" : "System NFC prompt for the read-only Libre 2 Plus sensor check."
+    },
+    "Libre 2 Plus pairing saved." : {
+      "comment" : "Developer-only Libre 2 Plus NFC pairing."
     },
     "NFC patch information" : {
       "comment" : "Label for the hexadecimal NFC patch information bytes."
@@ -132,11 +141,23 @@
     "Recognized European Libre 2 Plus signature" : {
       "comment" : "Developer scan result for a supported NFC patch signature."
     },
+    "Scan the same Libre 2 Plus sensor you checked." : {
+      "comment" : "Developer-only Libre 2 Plus NFC pairing."
+    },
     "Sensor information read." : {
       "comment" : "System NFC prompt after the read-only Libre 2 Plus scan completes."
     },
+    "Streaming was enabled, but pairing could not be saved. Pair the sensor again." : {
+      "comment" : "Developer-only Libre 2 Plus NFC pairing."
+    },
     "Unrecognized European Libre 2 Plus signature" : {
       "comment" : "Developer scan result for a patch signature outside the supported allowlist."
+    },
+    "Use a Libre 2 Plus sensor that has finished warming up." : {
+      "comment" : "Developer-only Libre 2 Plus NFC pairing."
+    },
+    "Use a spare sensor that has finished warming up. Enabling streaming can interrupt the Abbott app’s connection and alarms." : {
+      "comment" : "Developer-only Libre 2 Plus NFC pairing."
     },
     "“Libre 3 app” here means whichever Abbott app you use: FreeStyle Libre 3 or Libre by Abbott." : {
       "comment" : "Defines a shorthand the rest of this screen uses, so the other texts can say 'the Libre 3 app' without naming one of Abbott's two apps and misleading users of the other. Keep both product names untranslated.",
