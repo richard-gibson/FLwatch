@@ -207,6 +207,10 @@ The decoder uses the `Libre2.BLEExample` fixture from [LibreTransmitter at `4110
 
 The target before signing is available is a passing simulator test from the initial patch-info read through the first decoded frame and a reconnect. This verifies app logic against fixtures. Sensor compatibility, radio behavior and actual offline operation remain to be measured.
 
+The scripted path now drives the shared pairing and stream state through patch-info validation, confirmation, a FRAM read, streaming enable, subscription, unlock, fragmented frame decoding and reconnect. Tests compare the NFC enable payload and two BLE unlock payloads with the upstream implementation. They also cover cancellation, malformed responses, counter persistence failure, stale callbacks, duplicate frames and interrupted fragments. The test saves counters in memory. The production Core NFC and Core Bluetooth adapters, Keychain storage, and confirmation UI still need to be wired to this path.
+
+**Simulator milestone complete.** All 190 unit tests passed on the iPhone Air simulator with iOS 27.2, including three new pairing and stream tests.
+
 #### Hardware checks once signing is available
 
 1. Install an NFC-capable build on a physical iPhone. Enable Developer Mode and open **Settings → Debug Info → Read Libre 2 Plus sensor information**. Record the patch bytes and recognition result. Investigate an unrecognized signature before trying to enable streaming.

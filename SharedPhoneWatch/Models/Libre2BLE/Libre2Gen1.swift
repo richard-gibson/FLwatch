@@ -1,6 +1,6 @@
 import Foundation
 
-// BLE decoding adapted from LoopKit/LibreTransmitter's PreLibre2.swift at
+// Gen1 protocol adapted from LoopKit/LibreTransmitter's PreLibre2.swift and SensorPairingService.swift at
 // 41105123c3c4fb5c55ce89a38630cea2f8f7a17a. See LibreTransmitter-LICENSE.txt.
 enum Libre2Gen1 {
     static let frameLength = 46
@@ -22,6 +22,38 @@ enum Libre2Gen1 {
         let rawGlucose: Int
         let rawTemperature: Int
         let rawTemperatureAdjustment: Int
+    }
+
+    // Callers validate the UID and patch info when constructing pairing state.
+    static func enableStreamingParameters(uid: [UInt8], patchInfo: [UInt8], code: UInt32) -> Data {
+        let y = word(patchInfo, at: 4) ^ UInt16(truncatingIfNeeded: code)
+        let proof = commandProof(uid: uid, command: 0x1E, argument: y)
+        return Data([0x1E] + littleEndianBytes(code) + proof.flatMap(littleEndianBytes))
+    }
+
+    static func streamingUnlock(uid: [UInt8], patchInfo: [UInt8], code: UInt32, counter: UInt16) -> Data {
+        let requestTime = code &+ UInt32(counter)
+        let requestBytes = littleEndianBytes(requestTime)
+        let activation = commandProof(uid: uid, command: 0x1B, argument: 0x1B6A)
+        let enable = commandProof(
+            uid: uid, command: 0x1E, argument: UInt16(truncatingIfNeeded: code) ^ word(patchInfo, at: 4)
+        )
+        let mixed = transform([
+            word(uid, at: 4) &+ (enable[0] ^ UInt16(truncatingIfNeeded: requestTime >> 16)),
+            word(uid, at: 2) &+ activation[0],
+            word(uid, at: 0) &+ (enable[1] ^ UInt16(truncatingIfNeeded: requestTime)),
+            activation[1] &+ 0x14C6
+        ])
+        let activationBytes = activation.flatMap(littleEndianBytes)
+        let enableBytes = enable.flatMap(littleEndianBytes)
+        let prefix: [UInt8] = [0xC1, 0xC4, 0xC3, 0xC0, 0xD4, 0xE1, 0xE7, 0xBA]
+        let unlock = transform([
+            word(uid, at: 4) &+ checksum((prefix + littleEndianBytes(mixed[0]))[...]),
+            word(uid, at: 2) &+ checksum(mixed.dropFirst().flatMap(littleEndianBytes)[...]),
+            word(uid, at: 0) &+ checksum((activationBytes + enableBytes.prefix(2))[...]),
+            0x14C6 &+ checksum((enableBytes.suffix(2) + requestBytes)[...])
+        ])
+        return Data(requestBytes + unlock.flatMap(littleEndianBytes))
     }
 
     /// Recognizes the supported EU Plus signatures. A successful match must
@@ -63,8 +95,8 @@ enum Libre2Gen1 {
 
         let uid = Array(sensorUID)
         let encrypted = Array(frame)
-        let seed = keyBlock(uid: uid, x: 0x1B, y: 0x1B6A)
-        let x = ((seed[0] ^ 0x4163) ^ (seed[1] ^ 0x4344)) | 0x63
+        let seed = commandProof(uid: uid, command: 0x1B, argument: 0x1B6A)
+        let x = (seed[0] ^ seed[1]) | 0x63
         let y = word(encrypted, at: 0) ^ 0x63
 
         var key = keyBlock(uid: uid, x: x, y: y)
@@ -111,6 +143,15 @@ enum Libre2Gen1 {
 
     private static func word(_ bytes: [UInt8], at offset: Int) -> UInt16 {
         UInt16(bytes[offset]) | (UInt16(bytes[offset + 1]) << 8)
+    }
+
+    private static func littleEndianBytes<T: FixedWidthInteger>(_ value: T) -> [UInt8] {
+        (0..<MemoryLayout<T>.size).map { UInt8(truncatingIfNeeded: value >> (8 * $0)) }
+    }
+
+    private static func commandProof(uid: [UInt8], command: UInt16, argument: UInt16) -> [UInt16] {
+        let block = keyBlock(uid: uid, x: command, y: argument)
+        return [block[0] ^ 0x4163, block[1] ^ 0x4344]
     }
 
     private static func keyBlock(uid: [UInt8], x: UInt16, y: UInt16) -> [UInt16] {

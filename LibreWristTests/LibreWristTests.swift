@@ -23,6 +23,15 @@ final class LibreWristTests: XCTestCase {
         0x67, 0xA1, 0xD3, 0xB6, 0x3F, 0x91, 0xCD, 0x18, 0x4B, 0x95, 0x31, 0x6C,
         0x04, 0x5F, 0xE1, 0x96, 0xC4, 0xFD, 0x14, 0xFC, 0x68, 0xE0
     ])
+    private let libre2PlusPatchInfo = Data([0xC6, 0x09, 0x31, 0x01, 0x73, 0x17])
+    // Derived from the upstream fixture using its checksum and keystream.
+    // Wear time advances two minutes and the newest adjustment is negative.
+    private let libre2FollowUpFrame = Data([
+        0xB1, 0x94, 0xFA, 0xED, 0x2C, 0x5E, 0xA1, 0x69, 0x46, 0x57, 0xCF, 0xD0,
+        0xD8, 0x5A, 0xAA, 0xF1, 0xE2, 0x89, 0x1C, 0xE9, 0xAC, 0x82, 0x16, 0xFB,
+        0x67, 0xA1, 0xD3, 0xB6, 0x3F, 0x91, 0xCD, 0x18, 0x4B, 0x95, 0x31, 0x6C,
+        0x04, 0x5F, 0xE1, 0x96, 0xC4, 0xFD, 0x16, 0xFC, 0x0E, 0xCB
+    ])
 
     func testLibre2RecognizesEuropeanPlusPatchInfo() {
         XCTAssertTrue(Libre2Gen1.supportsPlus(patchInfo: Data([0xC6, 0x09, 0x31, 0x01, 0x00, 0x00])))
@@ -49,16 +58,8 @@ final class LibreWristTests: XCTestCase {
     }
 
     func testLibre2ReconnectFrameKeepsOverlappingSensorMinutesStable() throws {
-        // Derived from the upstream fixture using its checksum and keystream.
-        // Wear time advances two minutes and the newest adjustment is negative.
-        let next = Data([
-            0xB1, 0x94, 0xFA, 0xED, 0x2C, 0x5E, 0xA1, 0x69, 0x46, 0x57, 0xCF, 0xD0,
-            0xD8, 0x5A, 0xAA, 0xF1, 0xE2, 0x89, 0x1C, 0xE9, 0xAC, 0x82, 0x16, 0xFB,
-            0x67, 0xA1, 0xD3, 0xB6, 0x3F, 0x91, 0xCD, 0x18, 0x4B, 0x95, 0x31, 0x6C,
-            0x04, 0x5F, 0xE1, 0x96, 0xC4, 0xFD, 0x16, 0xFC, 0x0E, 0xCB
-        ])
         let first = try Libre2Gen1.decode(libre2FixtureFrame, sensorUID: libre2FixtureUID)
-        let second = try Libre2Gen1.decode(next, sensorUID: libre2FixtureUID)
+        let second = try Libre2Gen1.decode(libre2FollowUpFrame, sensorUID: libre2FixtureUID)
         XCTAssertEqual(second.wearMinutes, 11_511)
         XCTAssertEqual(second.trend.first?.rawTemperatureAdjustment, -8)
         XCTAssertEqual(second.history, first.history)
@@ -95,6 +96,121 @@ final class LibreWristTests: XCTestCase {
         XCTAssertNil(try assembler.append(libre2FixtureFrame.prefix(20)))
         assembler.reset()
         XCTAssertEqual(try assembler.append(libre2FixtureFrame), libre2FixtureFrame)
+    }
+
+    func testLibre2SimulatesPairingFirstFrameAndReconnect() throws {
+        let credentials = try libre2SimulatedPairing()
+        XCTAssertEqual(credentials.encryptedFRAM, Data(repeating: 0xAB, count: 344))
+        XCTAssertEqual(credentials.unlockCounter, 0)
+        var stream = Libre2Stream(credentials: credentials)
+        var savedCounters: [UInt16] = []
+
+        let first = try stream.startConnection()
+        XCTAssertEqual(first.request, .discover(address: Data([6, 5, 4, 3, 2, 1])))
+        XCTAssertEqual(stream.didDiscover(attempt: first.attempt), .subscribe)
+        // Checked against LibreTransmitter with the same UID, patch info and code.
+        let firstUnlock = Data([0x2B, 0, 0, 0, 0x75, 0xC8, 0xB0, 0xB9, 0xAE, 0xCF, 0x73, 0x14])
+        XCTAssertEqual(try stream.didSubscribe(attempt: first.attempt) { savedCounters.append($0) },
+                       .writeUnlock(firstUnlock))
+        XCTAssertEqual(savedCounters, [1])
+        stream.didWriteUnlock(attempt: first.attempt)
+        XCTAssertNil(try stream.receive(libre2FixtureFrame.prefix(20), attempt: first.attempt))
+        XCTAssertNil(try stream.receive(libre2FixtureFrame[20..<40], attempt: first.attempt))
+        let frame = try XCTUnwrap(stream.receive(libre2FixtureFrame.suffix(6), attempt: first.attempt))
+        XCTAssertEqual(frame.wearMinutes, 11_509)
+        XCTAssertNil(try stream.receive(libre2FixtureFrame, attempt: first.attempt))
+        XCTAssertNil(try stream.receive(libre2FollowUpFrame.prefix(20), attempt: first.attempt))
+        stream.didDisconnect(attempt: first.attempt)
+
+        let second = try stream.startConnection()
+        XCTAssertNil(stream.didDiscover(attempt: first.attempt))
+        XCTAssertEqual(stream.didDiscover(attempt: second.attempt), .subscribe)
+        let secondUnlock = Data([0x2C, 0, 0, 0, 0xEA, 0x6F, 0x3F, 0x49, 0x42, 0x70, 0x82, 0xCD])
+        XCTAssertEqual(try stream.didSubscribe(attempt: second.attempt) { savedCounters.append($0) },
+                       .writeUnlock(secondUnlock))
+        XCTAssertEqual(savedCounters, [1, 2])
+        stream.didWriteUnlock(attempt: first.attempt)
+        XCTAssertNil(try stream.receive(libre2FollowUpFrame, attempt: second.attempt))
+        stream.didWriteUnlock(attempt: second.attempt)
+        stream.didDisconnect(attempt: first.attempt)
+        XCTAssertNil(try stream.receive(libre2FollowUpFrame, attempt: first.attempt))
+        XCTAssertNil(try stream.receive(libre2FixtureFrame, attempt: second.attempt))
+        let next = try XCTUnwrap(stream.receive(libre2FollowUpFrame, attempt: second.attempt))
+        XCTAssertEqual(next.wearMinutes, 11_511)
+        XCTAssertEqual(next.history, frame.history)
+    }
+
+    func testLibre2PairingRequiresConfirmationAndRejectsInvalidResponses() throws {
+        var unsupported = Libre2Pairing()
+        XCTAssertThrowsError(try unsupported.receivePatchInfo(
+            uid: libre2FixtureUID, patchInfo: Data([0x2C, 0x0A, 0x3A, 0x02, 0, 0])
+        )) {
+            XCTAssertEqual($0 as? Libre2Pairing.PairingError, .unsupportedSensor)
+        }
+        XCTAssertThrowsError(try unsupported.confirmStreaming())
+
+        var malformed = Libre2Pairing()
+        XCTAssertThrowsError(try malformed.receivePatchInfo(
+            uid: libre2FixtureUID, patchInfo: libre2PlusPatchInfo.dropLast()
+        )) {
+            XCTAssertEqual($0 as? Libre2Pairing.PairingError, .malformedPatchInfo)
+        }
+
+        var pairing = Libre2Pairing()
+        try pairing.receivePatchInfo(uid: libre2FixtureUID, patchInfo: libre2PlusPatchInfo)
+        let fram = Data(repeating: 0, count: 344)
+        XCTAssertThrowsError(try pairing.receiveFRAM(fram, unlockCode: 42))
+        XCTAssertEqual(try pairing.confirmStreaming(), .readFRAM)
+        XCTAssertThrowsError(try pairing.receiveFRAM(fram.dropLast(), unlockCode: 42)) {
+            XCTAssertEqual($0 as? Libre2Pairing.PairingError, .malformedFRAM)
+        }
+        XCTAssertThrowsError(try pairing.receiveFRAM(fram, unlockCode: 42))
+
+        var cancelled = Libre2Pairing()
+        try cancelled.receivePatchInfo(uid: libre2FixtureUID, patchInfo: libre2PlusPatchInfo)
+        _ = try cancelled.confirmStreaming()
+        cancelled.cancel()
+        XCTAssertThrowsError(try cancelled.receiveFRAM(fram, unlockCode: 42))
+
+        var badAddress = Libre2Pairing()
+        try badAddress.receivePatchInfo(uid: libre2FixtureUID, patchInfo: libre2PlusPatchInfo)
+        _ = try badAddress.confirmStreaming()
+        _ = try badAddress.receiveFRAM(fram, unlockCode: 42)
+        XCTAssertThrowsError(try badAddress.receiveStreamingResponse(Data([1, 2]))) {
+            XCTAssertEqual($0 as? Libre2Pairing.PairingError, .malformedBluetoothAddress)
+        }
+        XCTAssertThrowsError(try badAddress.receiveStreamingResponse(Data([1, 2, 3, 4, 5, 6])))
+    }
+
+    func testLibre2StreamPersistsCounterBeforeUnlockAndRecoversPartialFrame() throws {
+        struct StorageFailure: Error {}
+        var stream = Libre2Stream(credentials: try libre2SimulatedPairing())
+        let connection = try stream.startConnection()
+        XCTAssertThrowsError(try stream.startConnection())
+        XCTAssertEqual(stream.didDiscover(attempt: connection.attempt), .subscribe)
+        XCTAssertThrowsError(try stream.didSubscribe(attempt: connection.attempt) { _ in throw StorageFailure() })
+        XCTAssertNotNil(try stream.didSubscribe(attempt: connection.attempt) { XCTAssertEqual($0, 1) })
+        XCTAssertNil(try stream.didSubscribe(attempt: connection.attempt) { _ in XCTFail("Duplicate subscription") })
+        stream.didWriteUnlock(attempt: connection.attempt)
+        XCTAssertNil(try stream.receive(libre2FixtureFrame.prefix(20), attempt: connection.attempt))
+        stream.partialFrameTimedOut(attempt: connection.attempt)
+        var corrupted = libre2FixtureFrame
+        corrupted[10] ^= 1
+        XCTAssertThrowsError(try stream.receive(corrupted, attempt: connection.attempt)) {
+            XCTAssertEqual($0 as? Libre2Gen1.DecodeError, .invalidChecksum)
+        }
+        XCTAssertEqual(try stream.receive(libre2FixtureFrame, attempt: connection.attempt)?.wearMinutes, 11_509)
+    }
+
+    private func libre2SimulatedPairing() throws -> Libre2Pairing.Credentials {
+        var pairing = Libre2Pairing()
+        XCTAssertEqual(pairing.firstRequest, .readPatchInfo)
+        try pairing.receivePatchInfo(uid: libre2FixtureUID, patchInfo: libre2PlusPatchInfo)
+        XCTAssertEqual(try pairing.confirmStreaming(), .readFRAM)
+        let parameters = Data([0x1E, 0x2A, 0, 0, 0, 0x8B, 0x7E, 0xEA, 0x46])
+        XCTAssertEqual(try pairing.receiveFRAM(Data(repeating: 0xAB, count: 344), unlockCode: 42),
+                       .enableStreaming(parameters: parameters))
+        return try pairing.receiveStreamingResponse(Data([1, 2, 3, 4, 5, 6]))
     }
 
     override func setUpWithError() throws {
